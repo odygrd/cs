@@ -21,8 +21,15 @@ public:
    */
   void insert(T const& item) noexcept
   {
-    _buffer[_head % _buffer.size()] = item;
-    _head += 1;
+    _buffer[_index] = item;
+
+    _index += 1;
+
+    if (_index == _buffer.size())
+    {
+      _index = 0;
+      _full = true;
+    }
   }
 
   /**
@@ -31,13 +38,16 @@ public:
    */
   [[nodiscard]] T const& back() const noexcept
   {
-    return (_head < _buffer.size()) ? _buffer[0] : _buffer[_head % _buffer.size()];
+    // _index here points to the next item to be replaced which is in the full buffer case it
+    // is the oldest object
+    return _full ? _buffer[_index] : _buffer[0];
   }
 
-  [[nodiscard]] bool is_full() const noexcept { return _head >= _buffer.size(); }
+  [[nodiscard]] bool is_full() const noexcept { return _full; }
 
 private:
   std::vector<T> _buffer;
-  std::size_t _head{0};
+  std::size_t _index{0};
+  bool _full { false };
 };
 } // namespace ets
