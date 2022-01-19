@@ -1,9 +1,9 @@
 #include <iostream>
+#include <mutex>
 #include <queue>
+#include <string>
 #include <thread>
 #include <variant>
-#include <mutex>
-#include <string>
 
 #include "ets/Throttler.h"
 
@@ -137,8 +137,8 @@ private:
         {
           using TMessageType = std::decay_t<decltype(arg)>;
           if constexpr (std::is_same_v<TMessageType, std::unique_ptr<NewOrder>> ||
-          std::is_same_v<TMessageType, std::unique_ptr<AmendOrder>> ||
-          std::is_same_v<TMessageType, std::unique_ptr<CancelOrder>>)
+                        std::is_same_v<TMessageType, std::unique_ptr<AmendOrder>> ||
+                        std::is_same_v<TMessageType, std::unique_ptr<CancelOrder>>)
           {
             // Check if we can send this message via the throttler
             std::chrono::nanoseconds const delay = _throttler.template try_send_message(*arg);
@@ -154,7 +154,8 @@ private:
               _scheduled = std::chrono::steady_clock::time_point{};
             }
           }
-        }, *next_message);
+        },
+        *next_message);
 
       // remove this message and read the next
       _message_queue.pop();
@@ -167,8 +168,7 @@ private:
    */
   void _send_queued_orders()
   {
-    if ((_scheduled != std::chrono::steady_clock::time_point{}) &&
-        std::chrono::steady_clock::now() >= _scheduled)
+    if ((_scheduled != std::chrono::steady_clock::time_point{}) && std::chrono::steady_clock::now() >= _scheduled)
     {
       // if we are past the point of sending orders send any queued orders
       std::chrono::nanoseconds const delay = _throttler.send_queued_messages();
@@ -185,11 +185,12 @@ private:
       }
     }
   }
+
 private:
   message_queue_t& _message_queue;
   std::thread _worker;
-  ets::Throttler<CancelOrder, OnSendCallback> _throttler{3, std::chrono::seconds{1}};
-  std::chrono::steady_clock::time_point _scheduled {};
+  ets::Throttler<CancelOrder, OnSendCallback> _throttler{3, std::chrono::seconds{1}, OnSendCallback{}};
+  std::chrono::steady_clock::time_point _scheduled{};
 };
 
 /**

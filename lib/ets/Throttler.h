@@ -20,11 +20,11 @@ namespace ets
  * virtual function
  */
 template <typename THighPriorityMessage, typename TOnSendCallback>
-class Throttler : public TOnSendCallback
+class Throttler
 {
 public:
-  Throttler(std::size_t max_messages, std::chrono::nanoseconds interval)
-    : sw(max_messages, interval)
+  Throttler(std::size_t max_messages, std::chrono::nanoseconds interval, TOnSendCallback on_send_callback)
+  : sw(max_messages, interval), _on_send_callback(on_send_callback)
   {
   }
 
@@ -43,7 +43,7 @@ public:
     if (delay.count() == 0)
     {
       // we can send the message right now
-      TOnSendCallback::on_send(message);
+      _on_send_callback.on_send(message);
       return std::chrono::nanoseconds{0};
     }
 
@@ -59,7 +59,7 @@ public:
     {
       // to support and store any other message type we type erase it
       using stored_message_t = StoredMessage<TMessage>;
-      _rest_messages.push_back(std::make_unique<stored_message_t>(message));
+      _rest_messages.push_back(std::make_unique<stored_message_t>(_on_send_callback, message));
     }
 
     // our thread needs to look our queue in next_message_ms
@@ -101,7 +101,7 @@ private:
 
       if constexpr (std::is_same_v<THighPriorityMessage, typename TMessageContainer::value_type>)
       {
-        TOnSendCallback::on_send(*message_it);
+        _on_send_callback.on_send(*message_it);
       }
       else
       {
@@ -118,24 +118,33 @@ private:
   }
 
 private:
-  class StoredMessageBase : public TOnSendCallback
+  class StoredMessageBase
   {
   public:
+    explicit StoredMessageBase(TOnSendCallback& on_send_callback) : _on_send_callback(on_send_callback) {};
     virtual ~StoredMessageBase() = default;
     virtual void send() = 0;
+
+  protected:
+    TOnSendCallback& _on_send_callback;
   };
 
   template <typename TMessage>
   class StoredMessage : public StoredMessageBase
   {
   public:
-    explicit StoredMessage(TMessage const& message) : _message(message) {}
+    StoredMessage(TOnSendCallback& on_send_callback, TMessage const& message) :
+    StoredMessageBase(on_send_callback), _message(message) {}
 
-    void send() override { TOnSendCallback::on_send(_message); }
+    void send() override { this->_on_send_callback.on_send(_message); }
 
   private:
     TMessage _message;
   };
+
+protected:
+  // protected to access for testing
+  TOnSendCallback _on_send_callback;
 
 private:
   SlidingWindow sw;
